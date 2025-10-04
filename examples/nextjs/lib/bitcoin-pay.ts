@@ -1,4 +1,5 @@
 import { createBitcoinPay } from "@bitcoin-pay/core";
+import type { Network } from "@bitcoin-pay/core";
 import { prismaAdapter } from "@bitcoin-pay/core/adapters/prisma";
 import { prisma } from "./db";
 
@@ -13,9 +14,7 @@ export function getBitcoinPay() {
     "NEXT_PUBLIC_BASE_URL",
     "BITCOIN_PAY_SECRET",
     "BITCOIN_DESCRIPTOR",
-    "BITCOIN_RPC_USER",
-    "BITCOIN_RPC_PASS",
-  ];
+  ] as const;
 
   for (const key of required) {
     if (!process.env[key]) {
@@ -23,31 +22,26 @@ export function getBitcoinPay() {
     }
   }
 
+  // Validate network
+  const network = process.env.BITCOIN_NETWORK || "mainnet";
+  const validNetworks = ["mainnet", "testnet", "regtest", "signet"];
+  if (!validNetworks.includes(network)) {
+    throw new Error(
+      `Invalid BITCOIN_NETWORK: ${network}. Must be one of: ${validNetworks.join(", ")}`
+    );
+  }
+
   payInstance = createBitcoinPay({
-    baseURL: process.env.NEXT_PUBLIC_BASE_URL as string,
-    secret: process.env.BITCOIN_PAY_SECRET as string,
-    descriptor: process.env.BITCOIN_DESCRIPTOR as string,
-    watcher:
-      process.env.BITCOIN_PAY_DISABLE_WATCHER === "1"
-        ? // Provide empty config when disabled; core will no-op
-          ({ zmq: {}, rpc: {} } as any)
-        : {
-            zmq: {
-              host: process.env.BITCOIN_ZMQ_HOST || "localhost",
-              hashtxPort: process.env.BITCOIN_ZMQ_TX_PORT
-                ? Number.parseInt(process.env.BITCOIN_ZMQ_TX_PORT)
-                : undefined,
-            },
-            rpc: {
-              host: process.env.BITCOIN_RPC_HOST || "localhost",
-              port: Number.parseInt(process.env.BITCOIN_RPC_PORT || "8332"),
-              username: process.env.BITCOIN_RPC_USER as string,
-              password: process.env.BITCOIN_RPC_PASS as string,
-            },
-          },
-    // Cast to any to satisfy adapter's minimal Prisma interface
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    baseURL: process.env.NEXT_PUBLIC_BASE_URL!,
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    secret: process.env.BITCOIN_PAY_SECRET!,
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    descriptor: process.env.BITCOIN_DESCRIPTOR!,
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     storage: prismaAdapter(prisma as any),
     basePath: "/api/pay",
+    network: network as Network,
     events: {
       onIntentCreated: async ({ intentId }) => {
         console.log("[BitcoinPay] Payment intent created:", intentId);
@@ -75,12 +69,6 @@ export function getBitcoinPay() {
       },
     },
   });
-
-  if (process.env.BITCOIN_PAY_DISABLE_WATCHER !== "1") {
-    payInstance.startWatcher().catch((error) => {
-      console.error("[BitcoinPay] Failed to start watcher:", error);
-    });
-  }
 
   return payInstance;
 }

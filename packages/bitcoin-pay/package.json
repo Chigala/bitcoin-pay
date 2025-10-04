@@ -120,12 +120,12 @@
     },
     "./integrations/inngest": {
       "import": {
-        "types": "./dist/integrations/inngest/index.d.ts",
-        "default": "./dist/integrations/inngest/index.js"
+        "types": "./dist/integrations/inngest.d.ts",
+        "default": "./dist/integrations/inngest.js"
       },
       "require": {
-        "types": "./dist/integrations/inngest/index.d.cts",
-        "default": "./dist/integrations/inngest/index.cjs"
+        "types": "./dist/integrations/inngest.d.cts",
+        "default": "./dist/integrations/inngest.cjs"
       }
     }
   },

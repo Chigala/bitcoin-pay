@@ -10,12 +10,13 @@ export default defineConfig((env) => {
       svelte: "./src/client/svelte/index.ts",
       "adapters/drizzle": "./src/adapters/drizzle-adapter/index.ts",
       "adapters/prisma": "./src/adapters/prisma-adapter/index.ts",
+      "integrations/inngest": "./src/integrations/inngest/index.ts",
     },
     format: ["esm", "cjs"],
     bundle: true,
     splitting: false,
     cjsInterop: true,
     skipNodeModulesBundle: true,
-    external: ["bitcoinjs-lib", "zeromq", "@tanstack/react-query"],
+    external: ["bitcoinjs-lib", "zeromq", "@tanstack/react-query", "inngest"],
   };
 });
