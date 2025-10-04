@@ -24,9 +24,49 @@ yarn add inngest
 
 ## Quick Start
 
-### 1. Create a Storage Adapter
+### Option 1: With Bitcoin-Pay (Recommended)
 
-First, implement a storage adapter to track your payments:
+If you're using the main `@bitcoin-pay/core` package, use the adapter bridge:
+
+```typescript
+// lib/inngest/client.ts
+import { createInngestIntegration, createInngestStorageAdapter } from "@bitcoin-pay/core/integrations/inngest";
+import { createBitcoinPay } from "@bitcoin-pay/core";
+
+// Create your bitcoin-pay instance
+const bitcoinPay = createBitcoinPay({
+  baseURL: process.env.BASE_URL!,
+  secret: process.env.SECRET!,
+  descriptor: process.env.DESCRIPTOR!,
+  storage: myDrizzleAdapter, // Your existing storage adapter
+  network: "mainnet",
+});
+
+// Create Inngest integration using the adapter bridge
+export const { inngest, functions } = createInngestIntegration({
+  appId: "my-bitcoin-app",
+
+  // Bridge your existing storage adapter
+  storage: createInngestStorageAdapter(
+    bitcoinPay.$context.options.storage,
+    bitcoinPay.$context.options.network
+  ),
+
+  pollInterval: "*/5 * * * *", // Every 5 minutes
+
+  onMempool: async (data) => {
+    console.log("Payment in mempool:", data);
+  },
+
+  onConfirmed: async (data) => {
+    console.log("Payment confirmed:", data);
+  },
+});
+```
+
+### Option 2: Standalone (Without Bitcoin-Pay)
+
+Implement your own storage adapter:
 
 ```typescript
 // lib/storage.ts
@@ -34,11 +74,8 @@ import { StorageAdapter, PendingPayment } from "@bitcoin-pay/core/integrations/i
 
 export const storageAdapter: StorageAdapter = {
   async getPendingPayments() {
-    // Return all payments that are not yet confirmed or expired
     return await db.payments.findMany({
-      where: {
-        status: { in: ["pending", "mempool"] },
-      },
+      where: { status: { in: ["pending", "mempool"] } },
     });
   },
 
@@ -57,7 +94,7 @@ export const storageAdapter: StorageAdapter = {
 };
 ```
 
-### 2. Set Up Inngest Integration
+### Set Up Inngest Integration
 
 ```typescript
 // lib/inngest/client.ts

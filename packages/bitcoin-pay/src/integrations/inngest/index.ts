@@ -46,6 +46,9 @@ export type {
   PaymentStatus,
 } from "./types.js";
 
+export { createInngestStorageAdapter } from "./adapter.js";
+export { MempoolClient } from "./mempool-client.js";
+
 /**
  * Event context type for event-triggered functions
  */
@@ -55,8 +58,6 @@ interface EventContext<T extends keyof PaymentEvents> {
     data: PaymentEvents[T]["data"];
   };
 }
-
-export { MempoolClient } from "./mempool-client.js";
 
 /**
  * Create Inngest integration for Bitcoin payment monitoring
