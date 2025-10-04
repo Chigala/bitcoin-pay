@@ -1,4 +1,7 @@
-import * as zmq from "zeromq";
+// NOTE: Do NOT statically import "zeromq" here. We will dynamically import it
+// inside start() only if there are active subscriptions. This keeps zeromq
+// completely optional for environments (e.g. Next.js dev) where native addons
+// cannot be loaded.
 import type { TxObservation } from "../types/models.js";
 
 export interface ZMQConfig {
@@ -23,14 +26,12 @@ export interface ZMQEventHandlers {
 }
 
 export class ZMQWatcher {
-  private sockets: zmq.Subscriber[] = [];
+  // Use any[] to avoid hard dependency on zeromq types at build time
+  private sockets: any[] = [];
   private handlers: ZMQEventHandlers;
   private isRunning = false;
 
-  constructor(
-    private config: ZMQConfig,
-    handlers: ZMQEventHandlers = {},
-  ) {
+  constructor(private config: ZMQConfig, handlers: ZMQEventHandlers = {}) {
     this.handlers = handlers;
   }
 
@@ -106,15 +107,23 @@ export class ZMQWatcher {
       });
     }
 
+    // If no ZMQ ports are configured, skip importing zeromq and return no-op
+    if (subscriptions.length === 0) {
+      this.isRunning = true;
+      return;
+    }
+
+    const zmq = await import("zeromq");
+
     for (const sub of subscriptions) {
-      const socket = new zmq.Subscriber();
+      const socket = new (zmq as any).Subscriber();
       const address = `tcp://${this.config.host}:${sub.port}`;
 
       socket.connect(address);
       socket.subscribe(sub.topic);
 
       (async () => {
-        for await (const [topic, ...msgParts] of socket) {
+        for await (const [topic, ...msgParts] of socket as any) {
           try {
             const data = msgParts[0] as Buffer;
             await sub.handler(data);

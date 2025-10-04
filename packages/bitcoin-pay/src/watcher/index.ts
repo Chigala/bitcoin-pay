@@ -69,7 +69,7 @@ export class BitcoinWatcher {
     // Load all assigned addresses into memory
     await this.loadWatchedAddresses();
 
-    // Start ZMQ listener
+    // Start ZMQ listener (no-op if no ports configured)
     await this.zmq.start();
 
     // Start polling for confirmation updates

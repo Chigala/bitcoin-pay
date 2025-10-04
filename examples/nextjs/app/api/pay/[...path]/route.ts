@@ -1,13 +1,14 @@
 import { getBitcoinPay } from "@/lib/bitcoin-pay";
 
-// Get Bitcoin Pay instance
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const pay = getBitcoinPay();
 
-// Handle all requests
 export async function GET(request: Request) {
-	return pay.handler(request);
+  return pay.handler(request);
 }
 
 export async function POST(request: Request) {
-	return pay.handler(request);
+  return pay.handler(request);
 }

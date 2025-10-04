@@ -18,8 +18,8 @@ nextjs/
 ├── lib/
 │   ├── bitcoin-pay.ts                 # Bitcoin Pay singleton
 │   └── db.ts                          # Database connection
-├── scripts/
-│   └── migrate.ts                     # Database migration script
+├── prisma/
+│   └── schema.prisma                  # Prisma schema for DB
 ├── .env.local                         # Your environment variables
 ├── .env.example                       # Template for env vars
 ├── next.config.js
@@ -106,15 +106,21 @@ psql -c "CREATE DATABASE bitcoin_pay;"
 ### 5. Run Migrations
 
 ```bash
+pnpm prisma:generate
 pnpm db:migrate
 ```
 
-This creates all required tables:
+This creates all required tables (bitcoin-pay + auth/todo models):
+
 - `bitcoin_pay_payment_intents`
 - `bitcoin_pay_deposit_addresses`
 - `bitcoin_pay_tx_observations`
 - `bitcoin_pay_magic_link_tokens`
 - `bitcoin_pay_customers`
+- `app_users`
+- `app_password_credentials`
+- `app_sessions`
+- `app_todos`
 
 ### 6. Start Development Server
 
@@ -208,6 +214,7 @@ Response:
 ### `lib/bitcoin-pay.ts`
 
 Singleton instance of Bitcoin Pay SDK. Handles:
+
 - Configuration from environment variables
 - Database adapter setup
 - Watcher initialization
@@ -215,7 +222,7 @@ Singleton instance of Bitcoin Pay SDK. Handles:
 
 ### `lib/db.ts`
 
-Database connection using Drizzle ORM with PostgreSQL.
+Database connection using Prisma Client with PostgreSQL.
 
 ### `app/api/pay/[...path]/route.ts`
 
@@ -224,6 +231,7 @@ Catch-all route handler that forwards all `/api/pay/*` requests to the Bitcoin P
 ### `app/pay/[token]/page.tsx`
 
 Payment page component using React hooks:
+
 - Displays payment amount and QR code
 - Shows countdown timer
 - Polls payment status every 3 seconds
@@ -233,9 +241,9 @@ Payment page component using React hooks:
 
 Demo homepage with a form to create payment links.
 
-### `scripts/migrate.ts`
+### `prisma/schema.prisma`
 
-Database migration script that creates all required tables.
+Prisma schema defining both bitcoin-pay models and a simple auth/todo app.
 
 ## Troubleshooting
 

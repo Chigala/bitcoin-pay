@@ -1,14 +1,11 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { PrismaClient } from "@prisma/client";
 
-const connectionString = process.env.DATABASE_URL!;
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
-if (!connectionString) {
-	throw new Error("DATABASE_URL environment variable is not set");
-}
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
 
-// Create postgres client
-const client = postgres(connectionString);
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-// Create drizzle instance
-export const db = drizzle(client);
+export const db = prisma;

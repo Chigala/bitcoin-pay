@@ -24,11 +24,21 @@ export class BitcoinPayClient {
    * Initialize a payment from magic link token
    */
   async initPayment(token: string): Promise<PaymentInitData> {
-    const response = await fetch(this.getURL(`/pay/${token}`));
+    const response = await fetch(this.getURL(`/pay/${token}`), {
+      headers: { Accept: "application/json" },
+    });
     if (!response.ok) {
-      throw new Error(`Payment init failed: ${response.statusText}`);
+      // Surface server error body to help debugging (e.g., token already used)
+      const body = await response.text().catch(() => "");
+      console.log ("this is the body: ", body )
+      const message = body || response.statusText;
+      throw new Error(`Payment init failed: ${message}`);
     }
     const data: unknown = await response.json();
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+
+    console.log("this is the data: ", data )
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     const anyData = data as any;
     return {
       intentId: String(anyData.intentId),
@@ -44,11 +54,14 @@ export class BitcoinPayClient {
    * Get payment status
    */
   async getStatus(intentId: string): Promise<PaymentStatusData> {
-    const response = await fetch(this.getURL(`/status?intentId=${intentId}`));
+    const response = await fetch(this.getURL(`/status?intentId=${intentId}`), {
+      headers: { Accept: "application/json" },
+    });
     if (!response.ok) {
       throw new Error(`Get status failed: ${response.statusText}`);
     }
     const data: unknown = await response.json();
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     const anyData = data as any;
     const status = String(anyData.status) as PaymentStatusData["status"];
     return {
@@ -77,7 +90,7 @@ export class BitcoinPayClient {
   pollStatus(
     intentId: string,
     callback: (data: PaymentStatusData) => void,
-    intervalMs: number = 3000
+    intervalMs = 3000,
   ): () => void {
     const poll = async () => {
       try {

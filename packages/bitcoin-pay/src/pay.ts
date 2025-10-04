@@ -113,14 +113,14 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     if (!tokenRecord) {
       throw new Error("Token not found");
     }
-    if (tokenRecord.consumed) {
-      throw new Error("Token already used");
-    }
     if (tokenRecord.expiresAt < new Date()) {
       throw new Error("Token expired");
     }
 
-    await fullOptions.storage.consumeMagicLinkToken(tokenRecord.id);
+    // Idempotent: mark consumed on first use; allow subsequent uses until expiry
+    if (!tokenRecord.consumed) {
+      await fullOptions.storage.consumeMagicLinkToken(tokenRecord.id);
+    }
 
     return { intentId: payload.intentId };
   }
@@ -215,16 +215,41 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
       return;
     }
 
-    if (!fullOptions.watcher.zmq || !fullOptions.watcher.rpc) {
-      throw new Error("Watcher requires both zmq and rpc configuration");
+    // Only start watcher if RPC is configured AND at least one ZMQ port is provided.
+    const hasRpc = Boolean(fullOptions.watcher?.rpc?.host);
+    const zmq = fullOptions.watcher?.zmq as
+      | {
+          host?: string;
+          hashtxPort?: number;
+          rawtxPort?: number;
+          hashblockPort?: number;
+          rawblockPort?: number;
+          sequencePort?: number;
+        }
+      | undefined;
+    const hasAnyZmqPort = Boolean(
+      zmq &&
+        (zmq.hashtxPort ||
+          zmq.rawtxPort ||
+          zmq.hashblockPort ||
+          zmq.rawblockPort ||
+          zmq.sequencePort)
+    );
+
+    if (!hasRpc || !hasAnyZmqPort) {
+      // Gracefully skip starting the watcher; UI will still work and status can be polled/updated later.
+      return;
     }
 
     const { BitcoinWatcher } = await import("./watcher/index.js");
 
     context.watcher = new BitcoinWatcher(
       {
-        zmq: fullOptions.watcher.zmq,
-        rpc: fullOptions.watcher.rpc,
+        // Non-null after guards above
+        // biome-ignore lint/style/noNonNullAssertion: <explanation>
+        zmq: fullOptions.watcher.zmq!,
+        // biome-ignore lint/style/noNonNullAssertion: <explanation>
+        rpc: fullOptions.watcher.rpc!,
         storage: fullOptions.storage,
         network: parsedDescriptor.network,
         confirmations: fullOptions.confirmations,
@@ -256,7 +281,9 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
   }
 
   async function migrate(): Promise<void> {
-    console.log("Migration stub - please add schema tables to your database manually");
+    console.log(
+      "Migration stub - please add schema tables to your database manually"
+    );
   }
 
   async function handler(request: Request): Promise<Response> {
@@ -330,7 +357,7 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
           return Response.json({ error: "Invalid intent ID" }, { status: 400 });
         }
 
-        const body = await request.json() as { ttlHours?: number };
+        const body = (await request.json()) as { ttlHours?: number };
         const { url, token } = await createMagicLink({
           intentId,
           ttlHours: body.ttlHours,
@@ -367,14 +394,12 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
 
       return Response.json({ error: "Not found" }, { status: 404 });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Internal server error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Internal server error";
       const errorStatus = (error as { status?: number }).status || 500;
 
       console.error("Handler error:", error);
-      return Response.json(
-        { error: errorMessage },
-        { status: errorStatus }
-      );
+      return Response.json({ error: errorMessage }, { status: errorStatus });
     }
   }
 
