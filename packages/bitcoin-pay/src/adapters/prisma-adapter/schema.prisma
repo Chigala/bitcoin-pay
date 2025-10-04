@@ -1,0 +1,89 @@
+// Prisma schema for Bitcoin Pay
+// This can be used with PostgreSQL, MySQL, SQLite, or other Prisma-supported databases
+
+datasource db {
+  provider = "postgresql" // Change to "mysql" or "sqlite" as needed
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model BitcoinPayPaymentIntent {
+  id            String    @id
+  customerId    String?   @map("customer_id")
+  email         String?
+  amountSats    BigInt    @map("amount_sats")
+  status        String
+  addressId     String?   @map("address_id")
+  memo          String?
+  requiredConfs Int       @default(1) @map("required_confs")
+  expiresAt     DateTime  @map("expires_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([customerId])
+  @@index([email])
+  @@index([expiresAt])
+  @@map("bitcoin_pay_payment_intents")
+}
+
+model BitcoinPayDepositAddress {
+  id              String    @id
+  address         String    @unique
+  derivationIndex Int       @map("derivation_index")
+  scriptPubKeyHex String    @map("script_pub_key_hex")
+  intentId        String?   @map("intent_id")
+  assignedAt      DateTime? @map("assigned_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([address])
+  @@index([intentId])
+  @@index([derivationIndex])
+  @@map("bitcoin_pay_deposit_addresses")
+}
+
+model BitcoinPayTxObservation {
+  id              String   @id
+  txid            String
+  vout            Int
+  valueSats       BigInt   @map("value_sats")
+  confirmations   Int      @default(0)
+  addressId       String   @map("address_id")
+  scriptPubKeyHex String   @map("script_pub_key_hex")
+  status          String
+  seenAt          DateTime @default(now()) @map("seen_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([txid, vout])
+  @@index([addressId])
+  @@index([status])
+  @@map("bitcoin_pay_tx_observations")
+}
+
+model BitcoinPayMagicLinkToken {
+  id        String   @id
+  token     String   @unique
+  intentId  String   @map("intent_id")
+  consumed  Boolean  @default(false)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([intentId])
+  @@map("bitcoin_pay_magic_link_tokens")
+}
+
+model BitcoinPayCustomer {
+  id        String   @id
+  email     String?  @unique
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@map("bitcoin_pay_customers")
+}

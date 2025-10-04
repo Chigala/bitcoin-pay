@@ -1,0 +1,209 @@
+{
+  "name": "@bitcoin-pay/core",
+  "version": "0.1.0",
+  "description": "Bitcoin payment SDK with magic links, live status tracking, and webhooks",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitcoin-pay/bitcoin-pay",
+    "directory": "packages/bitcoin-pay"
+  },
+  "scripts": {
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8000 tsup --clean --dts --minify",
+    "dev": "cross-env NODE_OPTIONS='--max-old-space-size=4000' tsup --watch --sourcemap",
+    "dev:dts": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup --watch --dts",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./client": {
+      "import": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "require": {
+        "types": "./dist/client.d.cts",
+        "default": "./dist/client.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
+    "./vue": {
+      "import": {
+        "types": "./dist/vue.d.ts",
+        "default": "./dist/vue.js"
+      },
+      "require": {
+        "types": "./dist/vue.d.cts",
+        "default": "./dist/vue.cjs"
+      }
+    },
+    "./svelte": {
+      "import": {
+        "types": "./dist/svelte.d.ts",
+        "default": "./dist/svelte.js"
+      },
+      "require": {
+        "types": "./dist/svelte.d.cts",
+        "default": "./dist/svelte.cjs"
+      }
+    },
+    "./adapters/drizzle": {
+      "import": {
+        "types": "./dist/adapters/drizzle.d.ts",
+        "default": "./dist/adapters/drizzle.js"
+      },
+      "require": {
+        "types": "./dist/adapters/drizzle.d.cts",
+        "default": "./dist/adapters/drizzle.cjs"
+      }
+    },
+    "./adapters/prisma": {
+      "import": {
+        "types": "./dist/adapters/prisma.d.ts",
+        "default": "./dist/adapters/prisma.js"
+      },
+      "require": {
+        "types": "./dist/adapters/prisma.d.cts",
+        "default": "./dist/adapters/prisma.cjs"
+      }
+    },
+    "./plugins": {
+      "import": {
+        "types": "./dist/plugins.d.ts",
+        "default": "./dist/plugins.js"
+      },
+      "require": {
+        "types": "./dist/plugins.d.cts",
+        "default": "./dist/plugins.cjs"
+      }
+    },
+    "./plugins/subscriptions": {
+      "import": {
+        "types": "./dist/plugins/subscriptions.d.ts",
+        "default": "./dist/plugins/subscriptions.js"
+      },
+      "require": {
+        "types": "./dist/plugins/subscriptions.d.cts",
+        "default": "./dist/plugins/subscriptions.cjs"
+      }
+    },
+    "./plugins/refunds": {
+      "import": {
+        "types": "./dist/plugins/refunds.d.ts",
+        "default": "./dist/plugins/refunds.js"
+      },
+      "require": {
+        "types": "./dist/plugins/refunds.d.cts",
+        "default": "./dist/plugins/refunds.cjs"
+      }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ],
+      "client": [
+        "./dist/client.d.ts"
+      ],
+      "react": [
+        "./dist/react.d.ts"
+      ],
+      "vue": [
+        "./dist/vue.d.ts"
+      ],
+      "svelte": [
+        "./dist/svelte.d.ts"
+      ],
+      "adapters/drizzle": [
+        "./dist/adapters/drizzle.d.ts"
+      ],
+      "adapters/prisma": [
+        "./dist/adapters/prisma.d.ts"
+      ],
+      "plugins": [
+        "./dist/plugins.d.ts"
+      ],
+      "plugins/subscriptions": [
+        "./dist/plugins/subscriptions.d.ts"
+      ],
+      "plugins/refunds": [
+        "./dist/plugins/refunds.d.ts"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "@types/react": "^18.3.14",
+    "react": "^18.3.1",
+    "vue": "^3.5.13",
+    "svelte": "^4.2.0 || ^5.0.0",
+    "drizzle-orm": "^0.35.0",
+    "tsup": "^8.3.5",
+    "typescript": "5.6.1-rc",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.6.1",
+    "bip32": "^5.0.0",
+    "bitcoinjs-lib": "^6.1.6",
+    "consola": "^3.2.3",
+    "defu": "^6.1.4",
+    "ecpair": "^3.0.0",
+    "kysely": "^0.27.4",
+    "nanoid": "^5.0.9",
+    "nanostores": "^0.11.3",
+    "tiny-secp256k1": "^2.2.4",
+    "uncrypto": "^0.1.3",
+    "zod": "^3.23.8",
+    "zeromq": "^6.5.0"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.35.0",
+    "prisma": "^5.22.0",
+    "react": "^18",
+    "vue": "^3.5",
+    "svelte": "^4.2.0 || ^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    },
+    "prisma": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}
