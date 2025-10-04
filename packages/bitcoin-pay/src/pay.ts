@@ -105,6 +105,7 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     token: string;
   }): Promise<{ intentId: string }> {
     const payload = verifyMagicLinkToken(data.token, fullOptions.secret);
+
     if (!payload) {
       throw new Error("Invalid or expired token");
     }
@@ -133,7 +134,9 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     expiresAt: Date;
     status: string;
   }> {
+
     const intent = await fullOptions.storage.getPaymentIntent(intentId);
+
     if (!intent) {
       throw new Error("Payment intent not found");
     }
