@@ -6,36 +6,6 @@ import type { StorageAdapter } from "./adapter";
  */
 export type Network = "mainnet" | "testnet" | "regtest" | "signet";
 
-/**
- * ZMQ configuration for Bitcoin Core
- */
-export interface ZMQConfig {
-  host: string;
-  hashblockPort?: number;
-  hashtxPort?: number;
-  rawblockPort?: number;
-  rawtxPort?: number;
-  sequencePort?: number;
-}
-
-/**
- * RPC configuration for Bitcoin Core
- */
-export interface RPCConfig {
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  timeout?: number;
-}
-
-/**
- * Watcher backend configuration
- */
-export interface WatcherBackendConfig {
-  zmq?: ZMQConfig;
-  rpc?: RPCConfig;
-}
 
 /**
  * Event handlers / webhook configuration
@@ -103,11 +73,6 @@ export interface BitcoinPayOptions {
    * @example "tr([F00D/86h/0h/0h]xpub.../0/*)"
    */
   descriptor: string;
-
-  /**
-   * Blockchain watcher configuration
-   */
-  watcher: WatcherBackendConfig;
 
   /**
    * Storage adapter for database operations

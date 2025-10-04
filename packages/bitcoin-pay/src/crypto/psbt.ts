@@ -147,21 +147,28 @@ export function signRefundPSBT(
 
 /**
  * Broadcast a signed refund transaction
+ *
+ * @deprecated The RPC watcher has been removed. Use Mempool.space API or your own RPC client.
+ * @example
+ * // Using fetch to broadcast via Mempool.space API:
+ * const response = await fetch(`https://mempool.space/api/tx`, {
+ *   method: 'POST',
+ *   body: txHex
+ * });
+ * const txid = await response.text();
  */
 export async function broadcastRefundTx(
   txHex: string,
-  rpcConfig: {
+  rpcConfig?: {
     host: string;
     port: number;
     username: string;
     password: string;
   }
 ): Promise<string> {
-  const { BitcoinRPC } = await import("../watcher/rpc.js");
-  const rpc = new BitcoinRPC(rpcConfig);
-
-  const txid = await rpc.sendRawTransaction(txHex);
-  return txid;
+  throw new Error(
+    "broadcastRefundTx is deprecated. Use Mempool.space API or your own RPC client to broadcast transactions."
+  );
 }
 
 /**

@@ -10,13 +10,10 @@ import {
   verifyMagicLinkToken,
 } from "./crypto/magic-link";
 import { nanoid } from "nanoid";
-import type { BitcoinWatcher } from "./watcher/index.js";
 
 export interface BitcoinPayContext {
   options: Required<BitcoinPayOptions>;
   parsedDescriptor: ReturnType<typeof parseDescriptor>;
-  watcherStarted: boolean;
-  watcher?: BitcoinWatcher;
 }
 
 export const createBitcoinPay = (options: BitcoinPayOptions) => {
@@ -25,7 +22,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     baseURL: options.baseURL,
     secret: options.secret,
     descriptor: options.descriptor,
-    watcher: options.watcher,
     storage: options.storage,
     confirmations: options.confirmations || 1,
     basePath: options.basePath || "/api/pay",
@@ -46,7 +42,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
   const context: BitcoinPayContext = {
     options: fullOptions,
     parsedDescriptor,
-    watcherStarted: false,
   };
 
   async function createPaymentIntent(data: {
@@ -213,75 +208,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     }
   }
 
-  async function startWatcher(): Promise<void> {
-    if (context.watcherStarted) {
-      return;
-    }
-
-    // Only start watcher if RPC is configured AND at least one ZMQ port is provided.
-    const hasRpc = Boolean(fullOptions.watcher?.rpc?.host);
-    const zmq = fullOptions.watcher?.zmq as
-      | {
-          host?: string;
-          hashtxPort?: number;
-          rawtxPort?: number;
-          hashblockPort?: number;
-          rawblockPort?: number;
-          sequencePort?: number;
-        }
-      | undefined;
-    const hasAnyZmqPort = Boolean(
-      zmq &&
-        (zmq.hashtxPort ||
-          zmq.rawtxPort ||
-          zmq.hashblockPort ||
-          zmq.rawblockPort ||
-          zmq.sequencePort)
-    );
-
-    if (!hasRpc || !hasAnyZmqPort) {
-      // Gracefully skip starting the watcher; UI will still work and status can be polled/updated later.
-      return;
-    }
-
-    const { BitcoinWatcher } = await import("./watcher/index.js");
-
-    context.watcher = new BitcoinWatcher(
-      {
-        // Non-null after guards above
-        // biome-ignore lint/style/noNonNullAssertion: <explanation>
-        zmq: fullOptions.watcher.zmq!,
-        // biome-ignore lint/style/noNonNullAssertion: <explanation>
-        rpc: fullOptions.watcher.rpc!,
-        storage: fullOptions.storage,
-        network: parsedDescriptor.network,
-        confirmations: fullOptions.confirmations,
-      },
-      {
-        onProcessing: async (data) => {
-          await fullOptions.events.onProcessing?.(data);
-        },
-        onConfirmed: async (data) => {
-          await fullOptions.events.onConfirmed?.(data);
-        },
-        onReorg: async (data) => {
-          await fullOptions.events.onReorg?.(data);
-        },
-      }
-    );
-
-    await context.watcher.start();
-    context.watcherStarted = true;
-  }
-
-  async function stopWatcher(): Promise<void> {
-    if (!context.watcherStarted || !context.watcher) {
-      return;
-    }
-    await context.watcher.stop();
-    context.watcher = undefined;
-    context.watcherStarted = false;
-  }
 
   async function migrate(): Promise<void> {
     console.log(
@@ -298,10 +224,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
         const token = path.replace("/pay/", "");
         const { intentId } = await verifyMagicLink({ token });
         const data = await ensureAssigned(intentId);
-
-        if (context.watcher) {
-          await context.watcher.addAddress(data.address, intentId);
-        }
 
         return Response.json(data);
       }
@@ -387,12 +309,18 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
       if (path.startsWith("/scan/") && request.method === "POST") {
         const intentId = path.replace("/scan/", "");
 
-        if (context.watcher) {
-          await context.watcher.scanForPayments(intentId);
-          return Response.json({ success: true });
+        // Manual scan endpoint - check payment status via storage
+        const intent = await fullOptions.storage.getPaymentIntent(intentId);
+        if (!intent) {
+          return Response.json({ error: "Intent not found" }, { status: 404 });
         }
 
-        return Response.json({ error: "Watcher not started" }, { status: 503 });
+        // Return current status - actual scanning should be done via Inngest integration
+        return Response.json({
+          success: true,
+          message: "Use Inngest integration for payment monitoring",
+          status: intent.status
+        });
       }
 
       return Response.json({ error: "Not found" }, { status: 404 });
@@ -414,8 +342,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     ensureAssigned,
     getIntent,
     expireStaleIntents,
-    startWatcher,
-    stopWatcher,
     migrate,
     $context: context,
   };
