@@ -36,8 +36,6 @@ export class BitcoinPayClient {
     }
     const data: unknown = await response.json();
     // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-
-    console.log("this is the data: ", data )
     // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     const anyData = data as any;
     return {
