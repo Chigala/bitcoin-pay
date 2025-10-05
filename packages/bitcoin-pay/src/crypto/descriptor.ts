@@ -28,10 +28,30 @@ export function parseDescriptor(
   if (!xpubMatch) {
     throw new Error("No xpub found in descriptor");
   }
-  const xpub = xpubMatch[1];
+  let xpub = xpubMatch[1];
 
-  const pathMatch = descriptor.match(/xpub[a-zA-Z0-9]+\/([0-9\/*h']+)/);
-  const derivationPath = pathMatch ? pathMatch[1] : "0/*";
+  // Convert xpub to target network if needed
+  const isMainnetXpub = xpub.startsWith("xpub");
+  const isTestnetXpub = xpub.startsWith("tpub");
+
+  if (isMainnetXpub && network !== "mainnet") {
+    // Convert mainnet xpub to testnet by decoding and re-encoding
+    const node = bip32.fromBase58(xpub, bitcoin.networks.bitcoin);
+    const chainCode = node.chainCode;
+    const publicKey = node.publicKey;
+    const testnetNode = bip32.fromPublicKey(publicKey, chainCode, bitcoin.networks.testnet);
+    xpub = testnetNode.toBase58();
+  } else if (isTestnetXpub && network === "mainnet") {
+    // Convert testnet tpub to mainnet by decoding and re-encoding
+    const node = bip32.fromBase58(xpub, bitcoin.networks.testnet);
+    const chainCode = node.chainCode;
+    const publicKey = node.publicKey;
+    const mainnetNode = bip32.fromPublicKey(publicKey, chainCode, bitcoin.networks.bitcoin);
+    xpub = mainnetNode.toBase58();
+  }
+
+  const pathMatch = descriptor.match(/(xpub|tpub)[a-zA-Z0-9]+\/([0-9\/*h']+)/);
+  const derivationPath = pathMatch ? pathMatch[2] : "0/*";
 
   return {
     type,
