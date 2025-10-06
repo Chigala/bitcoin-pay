@@ -17,6 +17,8 @@ export const paymentIntents = pgTable(
     requiredConfs: integer("required_confs").notNull().default(1),
     expiresAt: timestamp("expires_at").notNull(),
     confirmedAt: timestamp("confirmed_at"),
+    subscriptionId: text("subscription_id"),
+    billingCycleNumber: integer("billing_cycle_number"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -25,6 +27,7 @@ export const paymentIntents = pgTable(
     customerIdx: index("idx_payment_intents_customer").on(table.customerId),
     emailIdx: index("idx_payment_intents_email").on(table.email),
     expiresAtIdx: index("idx_payment_intents_expires_at").on(table.expiresAt),
+    subscriptionIdx: index("idx_payment_intents_subscription").on(table.subscriptionId),
   }),
 );
 
@@ -97,12 +100,72 @@ export const customers = pgTable(
   }),
 );
 
+export const subscriptionPlans = pgTable(
+  "bitcoin_pay_subscription_plans",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    amountSats: bigint("amount_sats", { mode: "number" }).notNull(),
+    currency: text("currency").notNull().default("BTC"),
+    interval: text("interval").notNull(),
+    intervalCount: integer("interval_count").notNull().default(1),
+    maxCycles: integer("max_cycles"),
+    trialDays: integer("trial_days"),
+    metadata: text("metadata"),
+    active: integer("active").notNull().default(1),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    activeIdx: index("idx_subscription_plans_active").on(table.active),
+  }),
+);
+
+export const subscriptions = pgTable(
+  "bitcoin_pay_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    planId: text("plan_id").notNull(),
+    customerId: text("customer_id"),
+    customerEmail: text("customer_email"),
+    status: text("status").notNull(),
+    currentPeriodStart: timestamp("current_period_start").notNull(),
+    currentPeriodEnd: timestamp("current_period_end").notNull(),
+    trialStart: timestamp("trial_start"),
+    trialEnd: timestamp("trial_end"),
+    cyclesCompleted: integer("cycles_completed").notNull().default(0),
+    lastPaymentIntentId: text("last_payment_intent_id"),
+    cancelAtPeriodEnd: integer("cancel_at_period_end").notNull().default(0),
+    canceledAt: timestamp("canceled_at"),
+    cancelReason: text("cancel_reason"),
+    metadata: text("metadata"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    customerIdx: index("idx_subscriptions_customer").on(table.customerId),
+    statusIdx: index("idx_subscriptions_status").on(table.status),
+    periodEndIdx: index("idx_subscriptions_period_end").on(table.currentPeriodEnd),
+    planIdx: index("idx_subscriptions_plan").on(table.planId),
+  }),
+);
+
+export const systemMetadata = pgTable("bitcoin_pay_system_metadata", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Type exports
 export type PaymentIntentRow = InferSelectModel<typeof paymentIntents>;
 export type DepositAddressRow = InferSelectModel<typeof depositAddresses>;
 export type TxObservationRow = InferSelectModel<typeof txObservations>;
 export type MagicLinkTokenRow = InferSelectModel<typeof magicLinkTokens>;
 export type CustomerRow = InferSelectModel<typeof customers>;
+export type SubscriptionPlanRow = InferSelectModel<typeof subscriptionPlans>;
+export type SubscriptionRow = InferSelectModel<typeof subscriptions>;
+export type SystemMetadataRow = InferSelectModel<typeof systemMetadata>;
 
 // Export all tables as schema
 export const schema = {
@@ -111,4 +174,7 @@ export const schema = {
   txObservations,
   magicLinkTokens,
   customers,
+  subscriptionPlans,
+  subscriptions,
+  systemMetadata,
 };

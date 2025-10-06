@@ -1,7 +1,6 @@
 import {
   createInngestIntegration,
   createInngestStorageAdapter,
-  type PaymentEvents,
 } from "@bitcoin-pay/core/integrations/inngest";
 import { getBitcoinPay } from "./bitcoin-pay";
 
@@ -22,7 +21,7 @@ export const { inngest, functions } = createInngestIntegration({
   // Poll every 5 minutes (customize as needed)
   // "*/1 * * * *" for every minute
   // "*/10 * * * *" for every 10 minutes
-  pollInterval: process.env.INNGEST_POLL_INTERVAL || "*/5 * * * *",
+  pollInterval: process.env.INNGEST_POLL_INTERVAL || "*/10 * * * *",
 
   // Minimum confirmations (default: 1)
   confirmations: Number(process.env.BITCOIN_CONFIRMATIONS) || 1,
@@ -36,8 +35,8 @@ export const { inngest, functions } = createInngestIntegration({
   // Event key for Inngest Cloud (optional, not needed for dev server)
   eventKey: process.env.INNGEST_EVENT_KEY,
 
-  // Custom handlers (called in addition to bitcoin-pay's event handlers)
-  onMempool: async (data: PaymentEvents["bitcoin/payment.mempool"]["data"]) => {
+  // Custom handlers - types are automatically inferred from InngestIntegrationConfig
+  onMempool: async (data) => {
     console.log("[Inngest] Payment detected in mempool:", {
       paymentId: data.paymentId,
       txid: data.txid,
@@ -46,7 +45,7 @@ export const { inngest, functions } = createInngestIntegration({
     });
   },
 
-  onConfirmed: async (data: PaymentEvents["bitcoin/payment.confirmed"]["data"]) => {
+  onConfirmed: async (data) => {
     console.log("[Inngest] Payment confirmed:", {
       paymentId: data.paymentId,
       txid: data.txid,
@@ -56,10 +55,75 @@ export const { inngest, functions } = createInngestIntegration({
     });
   },
 
-  onExpired: async (data: PaymentEvents["bitcoin/payment.expired"]["data"]) => {
+  onExpired: async (data) => {
     console.log("[Inngest] Payment expired:", {
       paymentId: data.paymentId,
       address: data.address,
     });
+  },
+
+  // Subscription event handlers - types are automatically inferred
+  subscriptions: {
+    renewalCron: "0 0 * * *", // Check daily at midnight
+    gracePeriodDays: 3,
+
+    onRenewalCreated: async (data) => {
+      console.log("[Inngest] Subscription renewal created:", {
+        subscriptionId: data.subscriptionId,
+        planId: data.planId,
+        customerId: data.customerId,
+        paymentIntentId: data.paymentIntentId,
+        amount: data.amount,
+        cycleNumber: data.cycleNumber,
+      });
+
+      // TODO: Send email notification to customer about upcoming payment
+      // Example: await sendEmail(data.customerId, "Subscription Renewal", ...)
+    },
+
+    onRenewalPaid: async (data) => {
+      console.log("[Inngest] Subscription payment received:", {
+        subscriptionId: data.subscriptionId,
+        txid: data.txid,
+        amount: data.amount,
+        cycleNumber: data.cycleNumber,
+      });
+
+      // TODO: Extend customer's access for another billing cycle
+      // Example: await updateUserAccess(data.customerId, data.currentPeriodEnd)
+    },
+
+    onPastDue: async (data) => {
+      console.log("[Inngest] Subscription payment past due:", {
+        subscriptionId: data.subscriptionId,
+        paymentIntentId: data.paymentIntentId,
+        daysPastDue: data.daysPastDue,
+      });
+
+      // TODO: Send payment reminder email
+      // Example: await sendEmail(data.customerId, "Payment Reminder", ...)
+    },
+
+    onCanceled: async (data) => {
+      console.log("[Inngest] Subscription canceled:", {
+        subscriptionId: data.subscriptionId,
+        planId: data.planId,
+        reason: data.reason,
+      });
+
+      // TODO: Handle subscription cancellation
+      // Example: await revokeUserAccess(data.customerId)
+    },
+
+    onExpired: async (data) => {
+      console.log("[Inngest] Subscription expired:", {
+        subscriptionId: data.subscriptionId,
+        planId: data.planId,
+        reason: data.reason,
+      });
+
+      // TODO: Revoke customer access
+      // Example: await revokeUserAccess(data.customerId)
+    },
   },
 });

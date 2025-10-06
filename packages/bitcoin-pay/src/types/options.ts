@@ -1,5 +1,6 @@
 import type { BitcoinPayPlugin } from "./plugins";
 import type { StorageAdapter } from "./adapter";
+import type { SubscriptionConfig } from "./subscription";
 
 /**
  * Bitcoin network type
@@ -100,6 +101,11 @@ export interface BitcoinPayOptions {
    * Plugins to extend functionality
    */
   plugins?: BitcoinPayPlugin[];
+
+  /**
+   * Subscription configuration (optional)
+   */
+  subscriptions?: SubscriptionConfig;
 
   /**
    * Advanced options

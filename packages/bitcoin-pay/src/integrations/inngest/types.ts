@@ -44,6 +44,56 @@ export type PaymentEvents = {
       address: string;
     };
   };
+  "bitcoin/subscription.renewal_created": {
+    data: {
+      subscriptionId: string;
+      planId: string;
+      customerId: string | null;
+      paymentIntentId: string;
+      amount: number;
+      cycleNumber: number;
+      currentPeriodEnd: string;
+    };
+  };
+  "bitcoin/subscription.renewal_paid": {
+    data: {
+      subscriptionId: string;
+      planId: string;
+      customerId: string | null;
+      paymentIntentId: string;
+      txid: string;
+      amount: number;
+      cycleNumber: number;
+    };
+  };
+  "bitcoin/subscription.past_due": {
+    data: {
+      subscriptionId: string;
+      planId: string;
+      customerId: string | null;
+      paymentIntentId: string;
+      amount: number;
+      cycleNumber: number;
+      daysPastDue: number;
+    };
+  };
+  "bitcoin/subscription.canceled": {
+    data: {
+      subscriptionId: string;
+      planId: string;
+      customerId: string | null;
+      reason: string | null;
+      canceledAt: string;
+    };
+  };
+  "bitcoin/subscription.expired": {
+    data: {
+      subscriptionId: string;
+      planId: string;
+      customerId: string | null;
+      reason: "max_cycles_reached" | "past_due_expired" | "canceled";
+    };
+  };
 };
 
 export interface PaymentStatus {
@@ -117,6 +167,48 @@ export interface InngestIntegrationConfig {
    * Custom callback when payment expires
    */
   onExpired?: (data: PaymentEvents["bitcoin/payment.expired"]["data"]) => Promise<void>;
+
+  /**
+   * Subscription configuration (optional)
+   */
+  subscriptions?: {
+    /**
+     * How often to check for subscription renewals (cron format)
+     * @default "0 0 * * *" (daily at midnight)
+     */
+    renewalCron?: string;
+
+    /**
+     * Grace period in days before marking subscription as expired
+     * @default 3
+     */
+    gracePeriodDays?: number;
+
+    /**
+     * Callback when a subscription renewal payment is created
+     */
+    onRenewalCreated?: (data: PaymentEvents["bitcoin/subscription.renewal_created"]["data"]) => Promise<void>;
+
+    /**
+     * Callback when a subscription renewal payment is received
+     */
+    onRenewalPaid?: (data: PaymentEvents["bitcoin/subscription.renewal_paid"]["data"]) => Promise<void>;
+
+    /**
+     * Callback when a subscription payment is past due
+     */
+    onPastDue?: (data: PaymentEvents["bitcoin/subscription.past_due"]["data"]) => Promise<void>;
+
+    /**
+     * Callback when a subscription is canceled
+     */
+    onCanceled?: (data: PaymentEvents["bitcoin/subscription.canceled"]["data"]) => Promise<void>;
+
+    /**
+     * Callback when a subscription expires
+     */
+    onExpired?: (data: PaymentEvents["bitcoin/subscription.expired"]["data"]) => Promise<void>;
+  };
 }
 
 export interface StorageAdapter {
@@ -141,6 +233,47 @@ export interface StorageAdapter {
    * Get payment by ID
    */
   getPayment(paymentId: string): Promise<PendingPayment | null>;
+
+  /**
+   * Get subscriptions needing renewal
+   */
+  getSubscriptionsNeedingRenewal?(beforeDate: Date): Promise<PendingSubscription[]>;
+
+  /**
+   * Get overdue subscriptions
+   */
+  getOverdueSubscriptions?(gracePeriodDays: number): Promise<PendingSubscription[]>;
+
+  /**
+   * Get subscription by ID
+   */
+  getSubscription?(subscriptionId: string): Promise<PendingSubscription | null>;
+
+  /**
+   * Get subscription plan by ID
+   */
+  getSubscriptionPlan?(planId: string): Promise<SubscriptionPlan | null>;
+
+  /**
+   * Update subscription
+   */
+  updateSubscription?(
+    subscriptionId: string,
+    updates: Partial<PendingSubscription>
+  ): Promise<void>;
+
+  /**
+   * Create payment intent
+   */
+  createPaymentIntent?(data: {
+    subscriptionId?: string;
+    billingCycleNumber?: number;
+    customerId?: string;
+    email?: string;
+    amountSats: number;
+    memo?: string;
+    requiredConfs?: number;
+  }): Promise<{ id: string; expiresAt: Date }>;
 }
 
 export interface PendingPayment {
@@ -152,4 +285,28 @@ export interface PendingPayment {
   network: "mainnet" | "testnet" | "regtest" | "signet";
   txid?: string;
   confirmations?: number;
+}
+
+export interface PendingSubscription {
+  id: string;
+  planId: string;
+  customerId: string | null;
+  customerEmail: string | null;
+  status: "active" | "trialing" | "past_due" | "canceled" | "expired";
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  trialStart: Date | null;
+  trialEnd: Date | null;
+  cyclesCompleted: number;
+  lastPaymentIntentId: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  amountSats: number;
+  interval: "daily" | "weekly" | "monthly" | "yearly";
+  intervalCount: number;
+  maxCycles: number | null;
 }

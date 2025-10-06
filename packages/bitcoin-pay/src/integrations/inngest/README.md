@@ -1,6 +1,6 @@
 # Inngest Integration for Bitcoin Payments
 
-This integration enables automatic Bitcoin payment monitoring using [Inngest](https://inngest.com) and the [Mempool.space API](https://mempool.space/docs/api). No need for ZMQ, local Bitcoin node, or complex infrastructure!
+This integration enables automatic Bitcoin payment monitoring using [Inngest](https://inngest.com) and the [Mempool.space API](https://mempool.space/docs/api).
 
 ## Features
 

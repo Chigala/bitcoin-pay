@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc, asc, sql } from "drizzle-orm";
+import { eq, and, isNull, desc, asc, sql, inArray, lte } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { StorageAdapter } from "../../types/adapter.js";
 import type {
@@ -8,12 +8,21 @@ import type {
   MagicLinkToken,
   Customer,
 } from "../../types/models.js";
+import type {
+  SubscriptionPlan,
+  Subscription,
+  CreateSubscriptionPlanInput,
+  SubscriptionFilters,
+} from "../../types/subscription.js";
 import {
   paymentIntents,
   depositAddresses,
   txObservations,
   magicLinkTokens,
   customers,
+  subscriptionPlans,
+  subscriptions,
+  systemMetadata,
 } from "./schema.js";
 
 export * from "./schema.js";
@@ -480,6 +489,333 @@ export function drizzleAdapter(db: DrizzleDB): StorageAdapter {
         ...updated[0],
         metadata: updated[0].metadata ? JSON.parse(updated[0].metadata as string) : undefined,
       } as Customer;
+    },
+
+    // Subscription Plans
+    async createSubscriptionPlan(plan): Promise<SubscriptionPlan> {
+      const now = new Date();
+      await db.insert(subscriptionPlans).values({
+        id: plan.id,
+        name: plan.name,
+        description: plan.description ?? null,
+        amountSats: plan.amountSats,
+        currency: plan.currency || "BTC",
+        interval: plan.interval,
+        intervalCount: plan.intervalCount || 1,
+        maxCycles: plan.maxCycles ?? null,
+        trialDays: plan.trialDays ?? null,
+        metadata: plan.metadata ? JSON.stringify(plan.metadata) : null,
+        active: plan.active ? 1 : 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const created = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, plan.id))
+        .limit(1) as DrizzleResult[];
+
+      return {
+        ...created[0],
+        active: created[0].active === 1,
+        metadata: created[0].metadata ? JSON.parse(created[0].metadata as string) : null,
+      } as SubscriptionPlan;
+    },
+
+    async getSubscriptionPlan(planId): Promise<SubscriptionPlan | null> {
+      const result = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, planId))
+        .limit(1) as DrizzleResult[];
+
+      if (!result[0]) return null;
+
+      return {
+        ...result[0],
+        active: result[0].active === 1,
+        metadata: result[0].metadata ? JSON.parse(result[0].metadata as string) : null,
+      } as SubscriptionPlan;
+    },
+
+    async updateSubscriptionPlan(planId, updates): Promise<SubscriptionPlan> {
+      const data = {
+        ...updates,
+        metadata: updates.metadata ? JSON.stringify(updates.metadata) : undefined,
+        active: updates.active !== undefined ? (updates.active ? 1 : 0) : undefined,
+        updatedAt: new Date(),
+      };
+
+      await db.update(subscriptionPlans).set(data).where(eq(subscriptionPlans.id, planId));
+
+      const updated = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, planId))
+        .limit(1) as DrizzleResult[];
+
+      return {
+        ...updated[0],
+        active: updated[0].active === 1,
+        metadata: updated[0].metadata ? JSON.parse(updated[0].metadata as string) : null,
+      } as SubscriptionPlan;
+    },
+
+    async upsertSubscriptionPlan(plan): Promise<SubscriptionPlan> {
+      const now = new Date();
+      const existing = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, plan.id))
+        .limit(1) as DrizzleResult[];
+
+      if (existing[0]) {
+        // Update
+        await db.update(subscriptionPlans).set({
+          name: plan.name,
+          description: plan.description ?? null,
+          amountSats: plan.amountSats,
+          interval: plan.interval,
+          intervalCount: plan.intervalCount || 1,
+          maxCycles: plan.maxCycles ?? null,
+          trialDays: plan.trialDays ?? null,
+          metadata: plan.metadata ? JSON.stringify(plan.metadata) : null,
+          updatedAt: now,
+        }).where(eq(subscriptionPlans.id, plan.id));
+      } else {
+        // Insert
+        await db.insert(subscriptionPlans).values({
+          id: plan.id,
+          name: plan.name,
+          description: plan.description ?? null,
+          amountSats: plan.amountSats,
+          currency: "BTC",
+          interval: plan.interval,
+          intervalCount: plan.intervalCount || 1,
+          maxCycles: plan.maxCycles ?? null,
+          trialDays: plan.trialDays ?? null,
+          metadata: plan.metadata ? JSON.stringify(plan.metadata) : null,
+          active: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      const result = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, plan.id))
+        .limit(1) as DrizzleResult[];
+
+      return {
+        ...result[0],
+        active: result[0].active === 1,
+        metadata: result[0].metadata ? JSON.parse(result[0].metadata as string) : null,
+      } as SubscriptionPlan;
+    },
+
+    async listSubscriptionPlans(activeOnly): Promise<SubscriptionPlan[]> {
+      let query = db.select().from(subscriptionPlans);
+
+      if (activeOnly) {
+        query = query.where(eq(subscriptionPlans.active, 1)) as typeof query;
+      }
+
+      const results = await query as unknown as DrizzleResult[];
+
+      return results.map((result) => ({
+        ...result,
+        active: result.active === 1,
+        metadata: result.metadata ? JSON.parse(result.metadata as string) : null,
+      })) as SubscriptionPlan[];
+    },
+
+    // Subscriptions
+    async createSubscription(subscription): Promise<Subscription> {
+      const id = nanoid();
+      const now = new Date();
+
+      await db.insert(subscriptions).values({
+        id,
+        planId: subscription.planId,
+        customerId: subscription.customerId ?? null,
+        customerEmail: subscription.customerEmail ?? null,
+        status: subscription.status,
+        currentPeriodStart: subscription.currentPeriodStart,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        trialStart: subscription.trialStart ?? null,
+        trialEnd: subscription.trialEnd ?? null,
+        cyclesCompleted: subscription.cyclesCompleted || 0,
+        lastPaymentIntentId: subscription.lastPaymentIntentId ?? null,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd ? 1 : 0,
+        canceledAt: subscription.canceledAt ?? null,
+        cancelReason: subscription.cancelReason ?? null,
+        metadata: subscription.metadata ? JSON.stringify(subscription.metadata) : null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const created = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, id))
+        .limit(1) as DrizzleResult[];
+
+      return {
+        ...created[0],
+        cancelAtPeriodEnd: created[0].cancelAtPeriodEnd === 1,
+        metadata: created[0].metadata ? JSON.parse(created[0].metadata as string) : null,
+      } as Subscription;
+    },
+
+    async getSubscription(subscriptionId): Promise<Subscription | null> {
+      const result = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, subscriptionId))
+        .limit(1) as DrizzleResult[];
+
+      if (!result[0]) return null;
+
+      return {
+        ...result[0],
+        cancelAtPeriodEnd: result[0].cancelAtPeriodEnd === 1,
+        metadata: result[0].metadata ? JSON.parse(result[0].metadata as string) : null,
+      } as Subscription;
+    },
+
+    async updateSubscription(subscriptionId, updates): Promise<Subscription> {
+      const data = {
+        ...updates,
+        metadata: updates.metadata ? JSON.stringify(updates.metadata) : undefined,
+        cancelAtPeriodEnd: updates.cancelAtPeriodEnd !== undefined ? (updates.cancelAtPeriodEnd ? 1 : 0) : undefined,
+        updatedAt: new Date(),
+      };
+
+      await db.update(subscriptions).set(data).where(eq(subscriptions.id, subscriptionId));
+
+      const updated = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, subscriptionId))
+        .limit(1) as DrizzleResult[];
+
+      return {
+        ...updated[0],
+        cancelAtPeriodEnd: updated[0].cancelAtPeriodEnd === 1,
+        metadata: updated[0].metadata ? JSON.parse(updated[0].metadata as string) : null,
+      } as Subscription;
+    },
+
+    async listSubscriptions(filters): Promise<Subscription[]> {
+      const conditions: ReturnType<typeof eq>[] = [];
+
+      if (filters.customerId) {
+        conditions.push(eq(subscriptions.customerId, filters.customerId));
+      }
+      if (filters.status) {
+        if (Array.isArray(filters.status)) {
+          conditions.push(inArray(subscriptions.status, filters.status));
+        } else {
+          conditions.push(eq(subscriptions.status, filters.status));
+        }
+      }
+      if (filters.planId) {
+        conditions.push(eq(subscriptions.planId, filters.planId));
+      }
+      if (filters.currentPeriodEndBefore) {
+        conditions.push(lte(subscriptions.currentPeriodEnd, filters.currentPeriodEndBefore));
+      }
+      if (filters.currentPeriodEndAfter) {
+        conditions.push(sql`${subscriptions.currentPeriodEnd} >= ${filters.currentPeriodEndAfter}`);
+      }
+
+      let query = db.select().from(subscriptions);
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions as Parameters<typeof and>)) as typeof query;
+      }
+
+      const results = await query as unknown as DrizzleResult[];
+
+      return results.map((result) => ({
+        ...result,
+        cancelAtPeriodEnd: result.cancelAtPeriodEnd === 1,
+        metadata: result.metadata ? JSON.parse(result.metadata as string) : null,
+      })) as Subscription[];
+    },
+
+    async getSubscriptionsNeedingRenewal(beforeDate): Promise<Subscription[]> {
+      const results = await db
+        .select()
+        .from(subscriptions)
+        .where(
+          and(
+            inArray(subscriptions.status, ["active", "trialing"]),
+            lte(subscriptions.currentPeriodEnd, beforeDate),
+            eq(subscriptions.cancelAtPeriodEnd, 0)
+          )
+        ) as unknown as DrizzleResult[];
+
+      return results.map((result) => ({
+        ...result,
+        cancelAtPeriodEnd: result.cancelAtPeriodEnd === 1,
+        metadata: result.metadata ? JSON.parse(result.metadata as string) : null,
+      })) as Subscription[];
+    },
+
+    async getOverdueSubscriptions(gracePeriodDays): Promise<Subscription[]> {
+      const gracePeriodEnd = new Date();
+      gracePeriodEnd.setDate(gracePeriodEnd.getDate() - gracePeriodDays);
+
+      const results = await db
+        .select()
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.status, "past_due"),
+            lte(subscriptions.currentPeriodEnd, gracePeriodEnd)
+          )
+        ) as unknown as DrizzleResult[];
+
+      return results.map((result) => ({
+        ...result,
+        cancelAtPeriodEnd: result.cancelAtPeriodEnd === 1,
+        metadata: result.metadata ? JSON.parse(result.metadata as string) : null,
+      })) as Subscription[];
+    },
+
+    // System metadata
+    async getMetadata(key): Promise<string | null> {
+      const result = await db
+        .select()
+        .from(systemMetadata)
+        .where(eq(systemMetadata.key, key))
+        .limit(1) as { value: string }[];
+
+      return result[0]?.value ?? null;
+    },
+
+    async setMetadata(key, value): Promise<void> {
+      const existing = await db
+        .select()
+        .from(systemMetadata)
+        .where(eq(systemMetadata.key, key))
+        .limit(1);
+
+      if (existing[0]) {
+        await db.update(systemMetadata).set({
+          value,
+          updatedAt: new Date(),
+        }).where(eq(systemMetadata.key, key));
+      } else {
+        await db.insert(systemMetadata).values({
+          key,
+          value,
+          updatedAt: new Date(),
+        });
+      }
     },
   };
 }

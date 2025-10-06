@@ -18,6 +18,8 @@ export const paymentIntentSchema = z.object({
   requiredConfs: z.number().int().default(1),
   expiresAt: z.date(),
   confirmedAt: z.date().nullish(),
+  subscriptionId: z.string().nullish(),
+  billingCycleNumber: z.number().int().nullish(),
   createdAt: z.date().default(() => new Date()),
   updatedAt: z.date().default(() => new Date()),
 });

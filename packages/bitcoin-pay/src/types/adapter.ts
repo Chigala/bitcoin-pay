@@ -5,6 +5,12 @@ import type {
   MagicLinkToken,
   Customer,
 } from "./models";
+import type {
+  SubscriptionPlan,
+  Subscription,
+  CreateSubscriptionPlanInput,
+  SubscriptionFilters,
+} from "./subscription";
 
 export interface StorageAdapter {
   createPaymentIntent(
@@ -62,4 +68,37 @@ export interface StorageAdapter {
   getCustomer?(id: string): Promise<Customer | null>;
   getCustomerByEmail?(email: string): Promise<Customer | null>;
   updateCustomer?(id: string, data: Partial<Customer>): Promise<Customer>;
+
+  // Subscription Plans
+  createSubscriptionPlan?(plan: SubscriptionPlan): Promise<SubscriptionPlan>;
+  getSubscriptionPlan?(planId: string): Promise<SubscriptionPlan | null>;
+  updateSubscriptionPlan?(
+    planId: string,
+    updates: Partial<SubscriptionPlan>
+  ): Promise<SubscriptionPlan>;
+  upsertSubscriptionPlan?(
+    plan: CreateSubscriptionPlanInput
+  ): Promise<SubscriptionPlan>;
+  listSubscriptionPlans?(activeOnly?: boolean): Promise<SubscriptionPlan[]>;
+
+  // Subscriptions
+  createSubscription?(
+    subscription: Omit<Subscription, "id" | "createdAt" | "updatedAt">
+  ): Promise<Subscription>;
+  getSubscription?(subscriptionId: string): Promise<Subscription | null>;
+  updateSubscription?(
+    subscriptionId: string,
+    updates: Partial<Subscription>
+  ): Promise<Subscription>;
+  listSubscriptions?(filters: SubscriptionFilters): Promise<Subscription[]>;
+
+  // Subscription queries for automation
+  getSubscriptionsNeedingRenewal?(
+    beforeDate: Date
+  ): Promise<Subscription[]>;
+  getOverdueSubscriptions?(gracePeriodDays: number): Promise<Subscription[]>;
+
+  // System metadata (for plan sync caching)
+  getMetadata?(key: string): Promise<string | null>;
+  setMetadata?(key: string, value: string): Promise<void>;
 }

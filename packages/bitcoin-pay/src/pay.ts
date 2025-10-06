@@ -1,5 +1,11 @@
 import type { BitcoinPayOptions } from "./types";
 import type { PaymentIntent, DepositAddress } from "./types/models";
+import type {
+  Subscription,
+  SubscriptionPlan,
+  CreateSubscriptionInput,
+  SubscriptionFilters,
+} from "./types/subscription";
 import {
   parseDescriptor,
   deriveAddress,
@@ -10,6 +16,7 @@ import {
   verifyMagicLinkToken,
 } from "./crypto/magic-link";
 import { nanoid } from "nanoid";
+import { createHash } from "node:crypto";
 
 export interface BitcoinPayContext {
   options: Required<BitcoinPayOptions>;
@@ -27,6 +34,11 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     basePath: options.basePath || "/api/pay",
     events: options.events || {},
     plugins: options.plugins || [],
+    subscriptions: options.subscriptions || {
+      plans: [],
+      autoSync: true,
+      gracePeriodDays: 3,
+    },
     advanced: {
       gapLimit: options.advanced?.gapLimit || 20,
       magicLinkTTL: options.advanced?.magicLinkTTL || 86400,
@@ -43,6 +55,57 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     options: fullOptions,
     parsedDescriptor,
   };
+
+  // Sync subscription plans if configured
+  if (
+    fullOptions.subscriptions.autoSync !== false &&
+    fullOptions.subscriptions.plans.length > 0
+  ) {
+    if (
+      fullOptions.storage.upsertSubscriptionPlan &&
+      fullOptions.storage.getMetadata &&
+      fullOptions.storage.setMetadata
+    ) {
+      // Hash the plans config
+      const plansHash = createHash("sha256")
+        .update(JSON.stringify(fullOptions.subscriptions.plans))
+        .digest("hex");
+
+      // Sync plans asynchronously (don't block initialization)
+      (async () => {
+        try {
+          if (
+            !fullOptions.storage.getMetadata ||
+            !fullOptions.storage.upsertSubscriptionPlan ||
+            !fullOptions.storage.setMetadata
+          ) {
+            return;
+          }
+
+          const lastHash = await fullOptions.storage.getMetadata(
+            "subscription_plans_hash"
+          );
+
+          if (plansHash !== lastHash) {
+            // Sync all plans
+            for (const planConfig of fullOptions.subscriptions.plans) {
+              await fullOptions.storage.upsertSubscriptionPlan(planConfig);
+            }
+
+            await fullOptions.storage.setMetadata(
+              "subscription_plans_hash",
+              plansHash
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[BitcoinPay] Failed to sync subscription plans:",
+            error
+          );
+        }
+      })();
+    }
+  }
 
   async function createPaymentIntent(data: {
     email?: string;
@@ -129,7 +192,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     expiresAt: Date;
     status: string;
   }> {
-
     const intent = await fullOptions.storage.getPaymentIntent(intentId);
 
     if (!intent) {
@@ -207,7 +269,6 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
       }
     }
   }
-
 
   async function migrate(): Promise<void> {
     console.log(
@@ -319,7 +380,7 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
         return Response.json({
           success: true,
           message: "Use Inngest integration for payment monitoring",
-          status: intent.status
+          status: intent.status,
         });
       }
 
@@ -334,6 +395,172 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     }
   }
 
+  // Subscription methods
+  async function createSubscription(
+    data: CreateSubscriptionInput
+  ): Promise<Subscription> {
+    if (!fullOptions.storage.createSubscription) {
+      throw new Error("Storage adapter does not support subscriptions");
+    }
+
+    if (!fullOptions.storage.getSubscriptionPlan) {
+      throw new Error("Storage adapter does not support getSubscriptionPlan");
+    }
+
+    const plan = await fullOptions.storage.getSubscriptionPlan(data.planId);
+    if (!plan) {
+      throw new Error(`Subscription plan not found: ${data.planId}`);
+    }
+
+    if (!plan.active) {
+      throw new Error(`Subscription plan is inactive: ${data.planId}`);
+    }
+
+    const now = data.startDate || new Date();
+    const trialDays = data.trialDays ?? plan.trialDays ?? 0;
+
+    const currentPeriodStart = now;
+    let currentPeriodEnd = new Date(now);
+    let trialStart: Date | null = null;
+    let trialEnd: Date | null = null;
+    let status: "trialing" | "active" = "active";
+
+    if (trialDays > 0) {
+      status = "trialing";
+      trialStart = now;
+      trialEnd = new Date(now);
+      trialEnd.setDate(trialEnd.getDate() + trialDays);
+      currentPeriodEnd = trialEnd;
+    } else {
+      // Calculate first billing period end
+      switch (plan.interval) {
+        case "daily":
+          currentPeriodEnd.setDate(
+            currentPeriodEnd.getDate() + plan.intervalCount
+          );
+          break;
+        case "weekly":
+          currentPeriodEnd.setDate(
+            currentPeriodEnd.getDate() + 7 * plan.intervalCount
+          );
+          break;
+        case "monthly":
+          currentPeriodEnd.setMonth(
+            currentPeriodEnd.getMonth() + plan.intervalCount
+          );
+          break;
+        case "yearly":
+          currentPeriodEnd.setFullYear(
+            currentPeriodEnd.getFullYear() + plan.intervalCount
+          );
+          break;
+      }
+    }
+
+    const subscription = await fullOptions.storage.createSubscription({
+      planId: data.planId,
+      customerId: data.customerId ?? null,
+      customerEmail: data.customerEmail ?? null,
+      status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      trialStart,
+      trialEnd,
+      cyclesCompleted: 0,
+      lastPaymentIntentId: null,
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      cancelReason: null,
+      metadata: data.metadata ?? null,
+    });
+
+    // Create first payment intent (if not in trial)
+    if (status === "active") {
+      await createPaymentIntent({
+        customerId: subscription.customerId ?? undefined,
+        email: subscription.customerEmail ?? undefined,
+        amountSats: plan.amountSats,
+        memo: `Subscription payment - ${plan.name}`,
+        requiredConfs: fullOptions.confirmations,
+      });
+    }
+
+    return subscription;
+  }
+
+  async function getSubscription(
+    subscriptionId: string
+  ): Promise<Subscription | null> {
+    if (!fullOptions.storage.getSubscription) {
+      throw new Error("Storage adapter does not support subscriptions");
+    }
+    return fullOptions.storage.getSubscription(subscriptionId);
+  }
+
+  async function listSubscriptions(
+    filters: SubscriptionFilters = {}
+  ): Promise<Subscription[]> {
+    if (!fullOptions.storage.listSubscriptions) {
+      throw new Error("Storage adapter does not support subscriptions");
+    }
+    return fullOptions.storage.listSubscriptions(filters);
+  }
+
+  async function cancelSubscription(
+    subscriptionId: string,
+    options: { immediately?: boolean; reason?: string } = {}
+  ): Promise<Subscription> {
+    if (!fullOptions.storage.updateSubscription) {
+      throw new Error("Storage adapter does not support subscriptions");
+    }
+
+    const subscription = await getSubscription(subscriptionId);
+    if (!subscription) {
+      throw new Error(`Subscription not found: ${subscriptionId}`);
+    }
+
+    if (
+      subscription.status === "canceled" ||
+      subscription.status === "expired"
+    ) {
+      throw new Error(`Subscription is already ${subscription.status}`);
+    }
+
+    const updateSubscription = fullOptions.storage.updateSubscription;
+
+    if (options.immediately) {
+      return updateSubscription(subscriptionId, {
+        status: "canceled",
+        canceledAt: new Date(),
+        cancelReason: options.reason ?? null,
+        cancelAtPeriodEnd: false,
+      });
+    }
+
+    return updateSubscription(subscriptionId, {
+      cancelAtPeriodEnd: true,
+      cancelReason: options.reason ?? null,
+    });
+  }
+
+  async function listSubscriptionPlans(
+    activeOnly?: boolean
+  ): Promise<SubscriptionPlan[]> {
+    if (!fullOptions.storage.listSubscriptionPlans) {
+      throw new Error("Storage adapter does not support subscriptions");
+    }
+    return fullOptions.storage.listSubscriptionPlans(activeOnly);
+  }
+
+  async function getSubscriptionPlan(
+    planId: string
+  ): Promise<SubscriptionPlan | null> {
+    if (!fullOptions.storage.getSubscriptionPlan) {
+      throw new Error("Storage adapter does not support subscriptions");
+    }
+    return fullOptions.storage.getSubscriptionPlan(planId);
+  }
+
   return {
     handler,
     createPaymentIntent,
@@ -343,6 +570,13 @@ export const createBitcoinPay = (options: BitcoinPayOptions) => {
     getIntent,
     expireStaleIntents,
     migrate,
+    // Subscription methods
+    createSubscription,
+    getSubscription,
+    listSubscriptions,
+    cancelSubscription,
+    listSubscriptionPlans,
+    getSubscriptionPlan,
     $context: context,
   };
 };

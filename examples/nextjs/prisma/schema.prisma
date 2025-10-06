@@ -8,23 +8,26 @@ datasource db {
 }
 
 model BitcoinPayPaymentIntent {
-  id            String    @id
-  customerId    String?   @map("customer_id")
-  email         String?
-  amountSats    BigInt    @map("amount_sats")
-  status        String
-  addressId     String?   @map("address_id")
-  memo          String?
-  requiredConfs Int       @default(1) @map("required_confs")
-  expiresAt     DateTime  @map("expires_at")
-  confirmedAt   DateTime? @map("confirmed_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                 String    @id
+  customerId         String?   @map("customer_id")
+  email              String?
+  amountSats         BigInt    @map("amount_sats")
+  status             String
+  addressId          String?   @map("address_id")
+  memo               String?
+  requiredConfs      Int       @default(1) @map("required_confs")
+  expiresAt          DateTime  @map("expires_at")
+  confirmedAt        DateTime? @map("confirmed_at")
+  subscriptionId     String?   @map("subscription_id")
+  billingCycleNumber Int?      @map("billing_cycle_number")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   @@index([status])
   @@index([customerId])
   @@index([email])
   @@index([expiresAt])
+  @@index([subscriptionId])
   @@map("bitcoin_pay_payment_intents")
 }
 
@@ -84,6 +87,61 @@ model BitcoinPayCustomer {
 
   @@index([email])
   @@map("bitcoin_pay_customers")
+}
+
+model BitcoinPaySubscriptionPlan {
+  id            String   @id
+  name          String
+  description   String?
+  amountSats    BigInt   @map("amount_sats")
+  currency      String   @default("BTC")
+  interval      String
+  intervalCount Int      @default(1) @map("interval_count")
+  trialDays     Int?     @map("trial_days")
+  maxCycles     Int?     @map("max_cycles")
+  active        Boolean  @default(true)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([active])
+  @@map("bitcoin_pay_subscription_plans")
+}
+
+model BitcoinPaySubscription {
+  id                  String    @id
+  planId              String    @map("plan_id")
+  customerId          String?   @map("customer_id")
+  customerEmail       String?   @map("customer_email")
+  status              String
+  currentPeriodStart  DateTime  @map("current_period_start")
+  currentPeriodEnd    DateTime  @map("current_period_end")
+  trialStart          DateTime? @map("trial_start")
+  trialEnd            DateTime? @map("trial_end")
+  cyclesCompleted     Int       @default(0) @map("cycles_completed")
+  lastPaymentIntentId String?   @map("last_payment_intent_id")
+  cancelAtPeriodEnd   Boolean   @default(false) @map("cancel_at_period_end")
+  canceledAt          DateTime? @map("canceled_at")
+  cancelReason        String?   @map("cancel_reason")
+  metadata            Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@index([planId])
+  @@index([customerId])
+  @@index([customerEmail])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("bitcoin_pay_subscriptions")
+}
+
+model BitcoinPaySystemMetadata {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bitcoin_pay_system_metadata")
 }
 
 // --- Simple Auth + Todo app models ---
